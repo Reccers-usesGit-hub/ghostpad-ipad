@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GhostPad">
+  <meta name="theme-color" content="#000000">
+  <title>GhostPad</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="controls.css">
+</head>
+<body>
+  <div class="fx-grid"></div>
+
+  <!-- HOME: pair / connect (matches the sketch) -->
+  <main id="home" class="home">
+    <section class="col col-friends">
+      <h1 class="h-col">FRIENDS</h1>
+      <ul id="pcs" class="pcs"></ul>
+    </section>
+
+    <section class="col col-center">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M12 31C12 17 21 8 32 8s20 9 20 23v25l-6.5-5.5L39 56l-7-5.5-7 5.5-6.5-5.5L12 56z" />
+          <rect x="19.5" y="26" width="10" height="3.6" rx="1.2" class="eye" />
+          <rect x="22.7" y="22.8" width="3.6" height="10" rx="1.2" class="eye" />
+          <circle cx="40" cy="25.5" r="2.4" class="eye" />
+          <circle cx="44.5" cy="30.5" r="2.4" class="eye" />
+        </svg>
+        GHOSTPAD
+      </div>
+      <h1 class="h-os">IPADOS</h1>
+      <div id="padName" class="pad-name" contenteditable="true" spellcheck="false" autocapitalize="words"></div>
+      <h2 class="h-enter">ENTER CODE<br>HERE</h2>
+      <div id="codeBox" class="code-box">
+        <div id="codeSlots" class="code-slots"></div>
+        <input id="codeInput" class="code-input" maxlength="6" autocomplete="off" autocorrect="off"
+               autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-label="PC device code">
+        <div id="codeMsg" class="code-msg">tap here and type the code shown on your friend's PC</div>
+        <button id="connectBtn" class="btn btn-primary connect-btn" disabled>CONNECT</button>
+      </div>
+    </section>
+
+    <section class="col col-status">
+      <div class="status-label">CURRENT<br>STATUS:<span id="statusVal" class="status-val">disconnected</span></div>
+      <div class="ping-label">PING</div>
+      <div id="pingVal" class="ping-val">N/A</div>
+      <button id="openSettings" class="btn btn-ghost small">⚙ SETTINGS</button>
+    </section>
+  </main>
+
+  <!-- PLAY: the stream + touch controller -->
+  <section id="play" class="play" hidden>
+    <video id="video" playsinline autoplay muted></video>
+    <div id="videoMsg" class="video-msg">waiting for video…</div>
+    <div id="pad" class="pad"></div>
+    <div class="hud">
+      <span id="hudDot" class="hud-dot"></span>
+      <span id="hudText" class="hud-text">connected</span>
+      <span id="hudPing" class="hud-ping">--</span>
+      <span id="hudModes" class="hud-modes" hidden></span>
+      <button id="hudVariant" class="hud-btn hud-variant" hidden></button>
+      <button id="hudSound" class="hud-btn" title="Sound">🔇</button>
+      <button id="hudPad" class="hud-btn" title="Show/hide touch controls">🎮</button>
+      <button id="hudLeave" class="hud-btn leave" title="Disconnect">✕</button>
+    </div>
+    <div id="soundTap" class="sound-tap" hidden>TAP TO TURN ON SOUND</div>
+  </section>
+
+  <!-- settings -->
+  <dialog id="setDlg" class="dlg">
+    <form method="dialog" id="setForm">
+      <h2 class="dlg-title">SETTINGS</h2>
+      <label class="field"><span>Touch controls opacity: <b id="opVal"></b>%</span>
+        <input type="range" id="sOpacity" min="15" max="100" step="5"></label>
+      <label class="field"><span>Touch controls size: <b id="szVal"></b>%</span>
+        <input type="range" id="sSize" min="70" max="140" step="5"></label>
+      <label class="check"><input type="checkbox" id="sHideWithPad"> Hide touch controls when a real controller is connected</label>
+      <label class="field"><span>Connection server <em>(leave empty unless your friend changed it on the PC)</em></span>
+        <input id="sServer" placeholder="empty = free PeerJS cloud" autocapitalize="off" autocorrect="off"></label>
+      <label class="field"><span>Relay (TURN) server <em>(only if you can't connect — same as on the PC)</em></span>
+        <input id="sRelayUrls" placeholder="turn:turn.example.com:3478" autocapitalize="off" autocorrect="off"></label>
+      <div class="row2">
+        <label class="field"><span>Relay username</span><input id="sRelayUser" autocapitalize="off" autocorrect="off" autocomplete="off"></label>
+        <label class="field"><span>Relay password</span><input id="sRelayPass" type="password" autocomplete="off"></label>
+      </div>
+      <div class="net-test"><button type="button" id="sNetTest" class="btn small">TEST CONNECTION</button><pre id="sNetResult" class="net-result"></pre></div>
+      <p class="about">GhostPad sends your touches to your friend's PC as an Xbox controller and shows you their screen.</p>
+      <div class="dlg-actions">
+        <span class="grow"></span>
+        <button type="button" id="sCancel" class="btn btn-ghost">CANCEL</button>
+        <button type="submit" class="btn btn-primary">SAVE</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="rotate" class="rotate">turn your device sideways ⟲</div>
+  <div id="toast" class="toast"></div>
+
+  <script src="vendor/peerjs.min.js"></script>
+  <script src="netcheck.js"></script>
+  <script src="controls.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

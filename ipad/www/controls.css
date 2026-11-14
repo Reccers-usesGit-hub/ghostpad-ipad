@@ -1,0 +1,81 @@
+/* GhostPad touch controls — shared by the iPad app and the PC Control Creator preview.
+   Sizes are set inline in units of --u (1vh on the iPad, 1% of the preview's height on the PC). */
+.pad { position: absolute; inset: 0; z-index: 4; touch-action: none; opacity: var(--pad-opacity, .7); }
+.pad.hidden-pad > * { display: none; }
+.pad .b {
+  --c: #44d62c;
+  position: absolute; display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  border: 2.5px solid var(--c); color: var(--c); background: rgba(0, 0, 0, .6);
+  font-family: 'Orbitron', sans-serif; font-weight: 900; line-height: 1; letter-spacing: .02em; white-space: nowrap;
+  transform: translate(-50%, -50%); pointer-events: none; text-shadow: 0 0 6px #000;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c) 45%, transparent);
+  transition: transform .06s ease, filter .06s ease;
+}
+.pad .b.square { border-radius: 16%; }
+.pad .b.pill { border-radius: 999px; }
+.pad .b.on { background: var(--c); color: #000; text-shadow: none; box-shadow: 0 0 18px var(--c); }
+.pad .b.toggle { border-style: dashed; }
+.pad .b.toggle.on { border-style: solid; animation: gp-latched 1.2s ease-in-out infinite; }
+@keyframes gp-latched { 50% { box-shadow: 0 0 4px var(--c); } }
+.pad .b.turbo::after { content: '⚡'; position: absolute; top: -.2em; right: -.2em; font-size: .55em; }
+
+/* picture buttons: a background badge and/or an icon instead of the neon outline */
+.pad .b.art { border: none; background: transparent; box-shadow: none; }
+.pad .b.art.on { background: transparent; box-shadow: none; transform: translate(-50%, -50%) scale(.9); filter: brightness(1.25) drop-shadow(0 0 10px var(--c)); }
+.pad .b.art.toggle.on { animation: none; filter: brightness(1.3) drop-shadow(0 0 14px var(--c)); }
+.pad .b img { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; -webkit-user-drag: none; }
+.pad .b img.bg { width: 100%; height: 100%; object-fit: contain; }
+.pad .b img.icon { object-fit: contain; }
+.pad .b img.icon.round { border-radius: 50%; object-fit: cover; }
+/* meter buttons (e.g. EX -> SUPER): silhouette with colour filling in from the bottom, then a pulse when full */
+.pad .b img.mbase, .pad .b img.mfill { display: none; }
+.pad .b.meter-on img.main { display: none; }
+.pad .b.meter-on img.mbase, .pad .b.meter-on img.mfill { display: block; }
+.pad .b img.mfill { clip-path: inset(var(--fill-top, 100%) 0 0 0); transition: clip-path .4s ease; }
+.pad .b.meter-ready { animation: gp-super-ready 1s ease-in-out infinite; }
+.pad .b.meter-ready .caption { color: #ffd23f; }
+@keyframes gp-super-ready {
+  0%, 100% { filter: drop-shadow(0 0 6px #ffd23f); }
+  50% { filter: drop-shadow(0 0 20px #ffd23f) brightness(1.2); }
+}
+/* count badge, e.g. "x3" EX shots available */
+.pad .b .count {
+  position: absolute; right: -6%; bottom: 2%; z-index: 2; min-width: 1.9em; padding: .12em .32em; border-radius: 999px;
+  background: #ffd23f; color: #3a1405; border: 2px solid #5b1b10; font-family: 'Orbitron', sans-serif; font-weight: 900;
+  font-size: calc(2.1 * var(--u, 1vh) * var(--pad-scale, 1)); line-height: 1.15; text-align: center; text-shadow: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
+}
+.pad .b .count[hidden] { display: none; }
+.pad .b.count-zero .count { background: #bdb3a0; color: #5b4a3a; border-color: #6b5a48; }
+.pad .b .txt { position: relative; color: var(--txt, #5b1b10); text-shadow: none; letter-spacing: .02em; }
+.pad .b.art.on .txt { color: #000; }
+.pad .b .caption {
+  position: absolute; left: 50%; top: 100%; transform: translate(-50%, 2px); color: #fff; font-family: 'Orbitron', sans-serif;
+  font-weight: 800; letter-spacing: .08em; text-shadow: 0 0 4px #000, 0 0 8px #000; white-space: nowrap;
+}
+
+.pad .stick-base {
+  --c: #44d62c;
+  position: absolute; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;
+  border: 2.5px solid var(--c); background: radial-gradient(circle, rgba(68, 214, 44, .14), rgba(0, 0, 0, .55) 70%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c) 40%, transparent), inset 0 0 20px rgba(68, 214, 44, .15);
+}
+.pad .stick-knob {
+  position: absolute; left: 50%; top: 50%; width: 44%; height: 44%; border-radius: 50%; transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--c) 50%, transparent); border: 2.5px solid var(--c); box-shadow: 0 0 14px var(--c);
+}
+.pad .stick-base.on .stick-knob { background: var(--c); }
+.pad .stick-label {
+  position: absolute; left: 50%; bottom: -1.6em; transform: translateX(-50%); font-family: 'Orbitron', sans-serif; font-weight: 800;
+  font-size: calc(1.8 * var(--u, 1vh)); color: var(--c); text-shadow: 0 0 6px #000; letter-spacing: .1em;
+}
+.pad .dpad { --c: #44d62c; position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+.pad .dpad .d {
+  position: absolute; width: 34%; height: 34%; border: 2.5px solid var(--c); background: rgba(0, 0, 0, .6); border-radius: 8px;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c) 45%, transparent);
+}
+.pad .dpad .d.on { background: var(--c); box-shadow: 0 0 18px var(--c); }
+.pad .dpad .u { left: 33%; top: 0; }
+.pad .dpad .dn { left: 33%; bottom: 0; }
+.pad .dpad .l { left: 0; top: 33%; }
+.pad .dpad .r { right: 0; top: 33%; }

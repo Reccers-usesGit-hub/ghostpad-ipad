@@ -1,0 +1,61 @@
+# Builds the GhostPad iPad app (.ipa) on a free GitHub Mac, and publishes the
+# same app as a web app on GitHub Pages so your friend can also use it from Safari.
+name: Build iPad app
+
+on:
+  push:
+    paths: ['ipad/**', '.github/workflows/build-ipad.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    name: Unsigned .ipa (sign it with Sideloadly / AltStore)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ipad/ios
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          xcodebuild -project ipad/ios/GhostPad.xcodeproj -scheme GhostPad -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+
+      - name: Package GhostPad.ipa
+        run: |
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/GhostPad.app out/Payload/
+          cd out && zip -qry GhostPad.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GhostPad-ipa
+          path: out/GhostPad.ipa
+
+  web:
+    name: Web app on GitHub Pages
+    # Turn on once: repo Settings -> Pages -> Source: "GitHub Actions".
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ipad/www
+      - id: deploy
+        uses: actions/deploy-pages@v4

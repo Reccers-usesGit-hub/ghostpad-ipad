@@ -1,0 +1,12 @@
+# This folder is uploaded to a PUBLIC GitHub repository that only holds the iPad app.
+# Everything is ignored except the iPad app and its build script, so the PC app, the
+# Cuphead pictures, the game mod and your settings can never be uploaded by accident.
+/*
+!/.gitignore
+!/.github/
+!/ipad/
+
+# never upload build output, even inside the allowed folders
+ipad/ios/GhostPad.xcodeproj/
+ipad/ios/build/
+.DS_Store
