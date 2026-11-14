@@ -694,7 +694,19 @@ function startFromUi(code) {
     const de = document.documentElement;
     try { (de.requestFullscreen || de.webkitRequestFullscreen || (() => {})).call(de); } catch { /* ignore */ }
   }
+  askName();
   connect(code);
+}
+
+// Safari cannot read the iPad's own name, so ask once what the PC should call this iPad.
+function askName() {
+  if (store.askedName || store.name !== 'iPad') return;
+  store.askedName = true;
+  let n = null;
+  try { n = prompt('Name this iPad - your friend sees it on their PC', ''); } catch { /* no prompts here */ }
+  n = String(n || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (n) { store.name = n; $('padName').textContent = n; }
+  saveStore();
 }
 
 $('pcs').addEventListener('click', (e) => {
