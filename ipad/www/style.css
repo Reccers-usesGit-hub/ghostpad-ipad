@@ -166,10 +166,6 @@ button, input { font-family: inherit; }
 .hud-mode + .hud-mode { border-left: 1px solid rgba(68, 214, 44, .3); }
 .hud-mode.on { background: var(--g); color: #000; }
 .hud-variant { width: auto; white-space: nowrap; padding: 0 12px; border-radius: 999px; font-family: 'Orbitron'; font-weight: 800; font-size: 12px; color: var(--g); text-transform: uppercase; }
-.sound-tap {
-  position: absolute; left: 50%; bottom: 14vh; transform: translateX(-50%); z-index: 6; padding: 14px 22px; border-radius: 14px;
-  background: rgba(0, 0, 0, .8); border: 2px solid var(--g); font-family: 'Orbitron'; font-weight: 800; letter-spacing: 2px; color: var(--g); box-shadow: var(--g-glow);
-}
 
 /* touch controller styles live in controls.css (shared with the PC Control Creator) */
 

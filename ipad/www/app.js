@@ -104,7 +104,7 @@ async function connect(code) {
   const saved = pcsByCode.get(code);
   const ctrl = p.connect(PREFIX + code, {
     label: 'ctrl', reliable: true, serialization: 'json',
-    metadata: { app: 'ghostpad', v: 1, deviceId: store.deviceId, name: store.name, token: saved ? saved.token : undefined },
+    metadata: { app: 'ghostpad', v: 1, video: 'ctrl', deviceId: store.deviceId, name: store.name, token: saved ? saved.token : undefined },
   });
   L.ctrl = ctrl;
   L.timers.push(setTimeout(() => {
@@ -170,6 +170,7 @@ function onCtrl(L, m) {
         videoMsg(m.error ? `no video: ${m.error}` : 'controls-only mode — the PC is not streaming video');
       }
       break;
+    case 'sdp': onSdp(L, m.d); break;
     case 'bye': onClosed(L); break;
     default: break;
   }
@@ -230,7 +231,7 @@ function onCall(call) {
   if (old) { try { old.close(); } catch { /* ignore */ } }
   call.answer();
   let why = 'closed';
-  call.on('stream', (ms) => { if (link === L && L.call === call) attachStream(L, call, ms); });
+  call.on('stream', (ms) => { if (link === L && L.call === call) attachStream(L, call.peerConnection, ms); });
   call.on('error', (e) => { why = 'error ' + ((e && (e.type || e.message)) || ''); });
   call.on('close', () => {
     if (link !== L || L.call !== call) return;
@@ -243,16 +244,42 @@ function onCall(call) {
   watchCall(L, call);
 }
 
+// The PC adds its screen + sound to the controls connection, which is already connected,
+// so the video needs no second route through the internet.
+async function onSdp(L, d) {
+  const pc = L.ctrl && L.ctrl.peerConnection;
+  if (!pc || !d || d.type !== 'offer' || typeof d.sdp !== 'string') return;
+  if (!L.trackWired) {
+    L.trackWired = true;
+    pc.addEventListener('track', (e) => {
+      if (link !== L) return;
+      attachStream(L, pc, e.streams[0] || new MediaStream([e.track]));
+    });
+    watchPc(L, pc, () => link === L);
+  }
+  try {
+    await pc.setRemoteDescription({ type: 'offer', sdp: d.sdp });
+    await pc.setLocalDescription(await pc.createAnswer());
+    send(L.ctrl, { t: 'sdp', d: { type: 'answer', sdp: pc.localDescription.sdp } });
+  } catch (e) {
+    diag(L, 'video setup failed: ' + (e && e.message));
+  }
+}
+
 // Report the video's network state and quality to the PC log.
 async function watchCall(L, call) {
   for (let i = 0; i < 50 && !call.peerConnection; i++) await new Promise((r) => setTimeout(r, 100));
   const pc = call.peerConnection;
   if (!pc || L.call !== call) return;
-  const started = now();
   pc.addEventListener('iceconnectionstatechange', () => { if (L.call === call) diag(L, `video network ${pc.iceConnectionState}`); });
+  watchPc(L, pc, () => link === L && L.call === call);
+}
+
+function watchPc(L, pc, isCurrent) {
+  const started = now();
   let last = null;
   const t = setInterval(async () => {
-    if (link !== L || L.call !== call) { clearInterval(t); return; }
+    if (!isCurrent()) { clearInterval(t); return; }
     try {
       const st = await pc.getStats();
       let inb = null;
@@ -277,11 +304,10 @@ async function watchCall(L, call) {
 }
 
 const video = $('video');
-function attachStream(L, call, ms) {
-  video.srcObject = ms;
+function attachStream(L, pc, ms) {
+  if (video.srcObject !== ms) video.srcObject = ms;
   L.gotVideo = true;
   videoMsg('');
-  const pc = call.peerConnection;
   if (pc) {
     for (const r of pc.getReceivers()) {
       try { r.jitterBufferTarget = 0; } catch { /* unsupported */ }
@@ -291,14 +317,22 @@ function attachStream(L, call, ms) {
   tryUnmute();
 }
 
+// Sound is on by default. Safari only allows sound after a tap on this element, so the CONNECT /
+// friend tap "unlocks" it (unlockSound); if Safari still says no, the first touch on the controls does.
+let soundOff = false; // the friend muted it with the 🔊 button
 async function tryUnmute() {
+  if (soundOff) { video.muted = true; try { await video.play(); } catch { /* ignore */ } renderHud(); return; }
   video.muted = false;
-  try { await video.play(); $('soundTap').hidden = true; } catch {
-    video.muted = true;
+  try { await video.play(); } catch {
+    video.muted = true; // not allowed yet: play silently, retried on the next touch
     try { await video.play(); } catch { /* ignore */ }
-    $('soundTap').hidden = false;
   }
   renderHud();
+}
+function unlockSound() {
+  if (soundOff || !video.paused) return;
+  video.muted = false;
+  try { const p = video.play(); if (p) p.catch(() => {}); } catch { /* ignore */ }
 }
 
 function send(ch, msg) {
@@ -589,6 +623,7 @@ codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preven
 $('connectBtn').addEventListener('click', (e) => { e.stopPropagation(); startFromUi(codeInput.value); });
 
 function startFromUi(code) {
+  unlockSound(); // this tap is what lets Safari play the game's sound later
   // Safari (not the app / home-screen app): go fullscreen while we still have the tap.
   const standalone = isNativeApp || navigator.standalone || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
   if (!standalone) {
@@ -629,11 +664,11 @@ nameEl.addEventListener('blur', () => {
 $('hudLeave').addEventListener('click', leave);
 $('hudPad').addEventListener('click', () => { padHidden = !padHidden; applyPadVisibility(); });
 $('hudSound').addEventListener('click', () => {
-  if (video.muted) tryUnmute(); else { video.muted = true; renderHud(); }
+  soundOff = !video.muted;
+  if (soundOff) { video.muted = true; renderHud(); } else tryUnmute();
 });
-$('soundTap').addEventListener('click', tryUnmute);
 // The first touch anywhere while playing counts as permission to play sound.
-document.addEventListener('touchend', () => { if (link && link.accepted && video.muted && !$('soundTap').hidden) tryUnmute(); }, { passive: true });
+document.addEventListener('touchend', () => { if (link && link.accepted && video.muted && !soundOff && video.srcObject) tryUnmute(); }, { passive: true });
 
 // settings
 const setDlg = $('setDlg');
