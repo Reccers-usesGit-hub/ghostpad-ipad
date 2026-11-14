@@ -1,9 +1,11 @@
-# Builds the GhostPad iPad app (.ipa) on a free GitHub Mac, and publishes the
-# same app as a web app on GitHub Pages so your friend can also use it from Safari.
+# Builds the GhostPad iPad app (.ipa) on a free GitHub Mac, publishes it as a public
+# download (GitHub Release "ipad-latest"), and publishes the same app as a web app on
+# GitHub Pages so your friend can also use it straight from Safari.
 name: Build iPad app
 
 on:
   push:
+    branches: [main]
     paths: ['ipad/**', '.github/workflows/build-ipad.yml']
   workflow_dispatch:
 
@@ -14,6 +16,8 @@ jobs:
   ipa:
     name: Unsigned .ipa (sign it with Sideloadly / AltStore)
     runs-on: macos-15
+    permissions:
+      contents: write   # to publish the public download
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +44,33 @@ jobs:
         with:
           name: GhostPad-ipa
           path: out/GhostPad.ipa
+
+      # A fixed public link anyone can download from, no GitHub account needed:
+      # https://github.com/<you>/<repo>/releases/latest/download/GhostPad.ipa
+      - name: Publish public download
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT=$(echo "$GITHUB_SHA" | cut -c1-7)
+          OWNER=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          REPO="${GITHUB_REPOSITORY#*/}"
+          cat > notes.md <<EOF
+          **GhostPad for iPad** — built from \`$SHORT\` on $(date -u '+%Y-%m-%d %H:%M UTC').
+
+          ### Install
+          This .ipa is unsigned; it gets signed for *your* iPad while installing:
+          1. On a Windows PC or Mac, install **Sideloadly** (or **AltStore**).
+          2. Plug the iPad in, drop **GhostPad.ipa** onto Sideloadly, sign in with your Apple ID, press Start.
+          3. On the iPad: Settings → General → VPN & Device Management → trust your Apple ID.
+          With a free Apple ID, re-sign every 7 days (same steps).
+
+          **No computer?** Use the web version instead: open
+          https://$OWNER.github.io/$REPO/ in Safari → Share → Add to Home Screen.
+          EOF
+          gh release delete ipad-latest --cleanup-tag --yes 2>/dev/null || true
+          gh release create ipad-latest out/GhostPad.ipa --target "$GITHUB_SHA" --latest \
+            --title "GhostPad for iPad (latest)" --notes-file notes.md
 
   web:
     name: Web app on GitHub Pages
