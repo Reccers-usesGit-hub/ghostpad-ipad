@@ -101,10 +101,15 @@ async function connect(code) {
     return;
   }
   if (link !== L) return;
+  await assetsReady;
+  if (link !== L) return;
   const saved = pcsByCode.get(code);
   const ctrl = p.connect(PREFIX + code, {
     label: 'ctrl', reliable: true, serialization: 'json',
-    metadata: { app: 'ghostpad', v: 1, video: 'ctrl', deviceId: store.deviceId, name: store.name, token: saved ? saved.token : undefined },
+    metadata: {
+      app: 'ghostpad', v: 1, video: 'ctrl', deviceId: store.deviceId, name: store.name, token: saved ? saved.token : undefined,
+      have: [...assets.keys()].slice(-600), // pictures saved from earlier: the PC skips these
+    },
   });
   L.ctrl = ctrl;
   L.timers.push(setTimeout(() => {
@@ -155,6 +160,11 @@ function onCtrl(L, m) {
       const changed = !GhostControls.layout || GhostControls.layout.id !== (m.layout && m.layout.id);
       const prefs = layoutPrefs(m.layout && m.layout.id);
       const l = GhostControls.load(m.layout, { resolve: resolveAsset, mode: prefs.mode || '', variant: prefs.variant || '' });
+      { // a saved picture went missing: ask the PC for it once
+        const refs = JSON.stringify(m.layout || {}).match(/asset:[a-f0-9]{8,40}/g) || [];
+        const missing = [...new Set(refs.map((x) => x.slice(6)))].filter((id) => !assets.has(id) && !(L.asked || (L.asked = new Set())).has(id));
+        if (missing.length) { for (const id of missing) L.asked.add(id); send(L.ctrl, { t: 'need', ids: missing }); }
+      }
       L.game = String(m.game || '').slice(0, 60);
       if (changed && L.accepted) toast(`Controls: ${l.name}`);
       renderModeBar();
@@ -207,6 +217,8 @@ function watchVideo(L, tries = 0) {
   clearTimeout(L.videoWatch);
   L.videoWatch = setTimeout(() => {
     if (link !== L || !L.accepted || (L.gotVideo && video.readyState >= 2)) return; // picture is showing
+    // Video arrived but nothing plays: maybe this iPad can't decode the relabelled High stream. Use the next codec.
+    if (L.gotVideo && RELABEL_HIGH && !L.avoidHigh) { L.avoidHigh = true; diag(L, 'no picture with H.264 High — trying the next codec'); }
     diag(L, `still no picture — asking for the video again (${tries + 1})`);
     send(L.ctrl, { t: 'wantStream', why: L.call ? 'call open but no picture' : 'no call' });
     if (tries < 5) watchVideo(L, tries + 1);
@@ -244,6 +256,16 @@ function onCall(call) {
   watchCall(L, call);
 }
 
+// The PC's graphics card encodes H.264 *High*; its Baseline falls back to slow software. Safari decodes
+// High but only lists "Constrained High" (640c), so it would skip the PC's High stream. WebRTC never
+// uses B-frames, so a High stream plays as Constrained High: relabel it both ways during setup.
+function decodesH264(prefix) {
+  try {
+    return RTCRtpReceiver.getCapabilities('video').codecs.some((c) => c.mimeType === 'video/H264' && (c.sdpFmtpLine || '').toLowerCase().includes('profile-level-id=' + prefix));
+  } catch { return false; }
+}
+const RELABEL_HIGH = !decodesH264('6400') && decodesH264('640c');
+
 // The PC adds its screen + sound to the controls connection, which is already connected,
 // so the video needs no second route through the internet.
 async function onSdp(L, d) {
@@ -258,9 +280,12 @@ async function onSdp(L, d) {
     watchPc(L, pc, () => link === L);
   }
   try {
-    await pc.setRemoteDescription({ type: 'offer', sdp: d.sdp });
+    const relabel = RELABEL_HIGH && !L.avoidHigh && /profile-level-id=6400/i.test(d.sdp) && !/profile-level-id=640c/i.test(d.sdp);
+    await pc.setRemoteDescription({ type: 'offer', sdp: relabel ? d.sdp.replace(/profile-level-id=6400/gi, 'profile-level-id=640c') : d.sdp });
     await pc.setLocalDescription(await pc.createAnswer());
-    send(L.ctrl, { t: 'sdp', d: { type: 'answer', sdp: pc.localDescription.sdp } });
+    let answer = pc.localDescription.sdp;
+    if (relabel) answer = answer.replace(/profile-level-id=640c/gi, 'profile-level-id=6400');
+    send(L.ctrl, { t: 'sdp', d: { type: 'answer', sdp: answer } });
   } catch (e) {
     diag(L, 'video setup failed: ' + (e && e.message));
   }
@@ -294,7 +319,11 @@ function watchPc(L, pc, isCurrent) {
       const mbps = secs ? (d('bytesReceived') * 8) / secs / 1e6 : ((inb.bytesReceived || 0) * 8) / (now() - started) / 1000;
       const l = pair && st.get(pair.localCandidateId);
       const rm = pair && st.get(pair.remoteCandidateId);
+      const codec = st.get(inb.codecId);
       diag(L, `video in: ${mbps.toFixed(1)} Mbps · ${Math.round(inb.framesPerSecond || 0)} fps · ${inb.frameWidth || '?'}x${inb.frameHeight || '?'}`
+        + ` · ${codec ? codec.mimeType.replace('video/', '') + ' ' + ((/profile-level-id=(\w+)/.exec(codec.sdpFmtpLine || '') || [])[1] || '') : '?'}`
+        + ` · decoder ${inb.decoderImplementation || '?'}${inb.powerEfficientDecoder ? ' (hardware)' : ''}`
+        + ` · delay ${inb.jitterBufferEmittedCount ? Math.round((inb.jitterBufferDelay / inb.jitterBufferEmittedCount) * 1000) + ' ms buffer' : '?'}`
         + ` · lost ${d('packetsLost')} pkts · dropped ${d('framesDropped')} frames · jitter ${Math.round((inb.jitter || 0) * 1000)} ms`
         + (pair ? ` · via ${l ? l.candidateType : '?'}/${rm ? rm.candidateType : '?'} ${l && l.protocol ? l.protocol : ''}` : ''));
       last = inb;
@@ -529,8 +558,32 @@ function onAssetChunk(m) {
   let p = assetParts.get(m.id);
   if (!p || p.n !== n) { p = { n, got: 0, parts: new Array(n) }; assetParts.set(m.id, p); }
   if (p.parts[i] === undefined) { p.parts[i] = m.d; p.got++; }
-  if (p.got === n) { assets.set(m.id, p.parts.join('')); assetParts.delete(m.id); }
+  if (p.got === n) { const data = p.parts.join(''); assets.set(m.id, data); assetParts.delete(m.id); assetDb.put(m.id, data); }
 }
+
+// Button pictures are saved on the iPad (IndexedDB), so the PC sends each one only once, not on every
+// connect: on a slow upload those ~2 MB used to clog the connection for the first 10-20 seconds.
+const assetDb = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('ghostpad', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('assets');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+  return {
+    loadAll: async (into) => {
+      const db = await open();
+      await new Promise((res) => {
+        const req = db.transaction('assets', 'readonly').objectStore('assets').openCursor();
+        req.onsuccess = () => { const c = req.result; if (!c) { res(); return; } if (typeof c.value === 'string') into.set(String(c.key), c.value); c.continue(); };
+        req.onerror = () => res();
+      });
+    },
+    put: async (id, data) => { try { (await open()).transaction('assets', 'readwrite').objectStore('assets').put(data, id); } catch { /* storage full / private mode */ } },
+  };
+})();
+const assetsReady = Promise.race([assetDb.loadAll(assets).catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
 const resolveAsset = (ref) => (typeof ref === 'string' && ref.startsWith('asset:') ? assets.get(ref.slice(6)) || '' : '');
 
 // ---------- layout modes (e.g. Isle / Battle / Plane) and character choice, remembered per layout ----------
