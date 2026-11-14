@@ -5,12 +5,10 @@ Type the code shown on your friend's PC, and their screen and sound stream to yo
 touches (or a Bluetooth controller) act as an Xbox controller on their PC.
 
 ## Get it
-- **Web app (no install):** open **https://reccers-usesgit-hub.github.io/ghostpad-ipad/** in Safari, then
-  **Share → Add to Home Screen**.
-- **.ipa:** **[download GhostPad.ipa](https://github.com/Reccers-usesGit-hub/ghostpad-ipad/releases/latest/download/GhostPad.ipa)**
-  (no GitHub account needed) and install it with Sideloadly or AltStore — it's unsigned; they sign it
-  with your Apple ID. Install steps are on the [release page](https://github.com/Reccers-usesGit-hub/ghostpad-ipad/releases/latest).
+Open **https://reccers-usesgit-hub.github.io/ghostpad-ipad/** in **Safari**, then
+**Share → Add to Home Screen**, and always start GhostPad from that home-screen icon.
+Nothing to install, and it updates by itself.
 
-## Build it yourself
-`ipad/www` is the app; `ipad/ios` wraps it with XcodeGen
-(`brew install xcodegen && cd ipad/ios && xcodegen generate`, then open `GhostPad.xcodeproj`).
+## How it's built
+`ipad/www` is the whole app (plain HTML/CSS/JS + PeerJS). Every push to `ipad/www` republishes it on
+GitHub Pages (`.github/workflows/build-ipad.yml`).
