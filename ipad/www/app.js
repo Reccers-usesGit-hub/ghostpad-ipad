@@ -275,7 +275,10 @@ async function onSdp(L, d) {
     L.trackWired = true;
     pc.addEventListener('track', (e) => {
       if (link !== L) return;
-      attachStream(L, pc, e.streams[0] || new MediaStream([e.track]));
+      if (!L.media) L.media = new MediaStream();
+      for (const old of L.media.getTracks()) if (old.kind === e.track.kind && old !== e.track) L.media.removeTrack(old);
+      if (!L.media.getTracks().includes(e.track)) L.media.addTrack(e.track);
+      attachStream(L, pc, L.media);
     });
     watchPc(L, pc, () => link === L);
   }
@@ -476,19 +479,27 @@ function pump(force) {
   }
   const key = b + ',' + out.join(',');
   const ts = now();
-  if (!force && key === lastKey && ts - lastSentAt < 100) return;
+  if (!force && key === lastKey && ts - lastSentAt < 50) return;
+  const changed = key !== lastKey;
   lastKey = key;
   lastSentAt = ts;
   const ch = L.input && L.input.open ? L.input : L.ctrl;
   send(ch, { t: 'i', s: ++L.seq, b, a: out.slice() });
+  if (changed && ch === L.input) {
+    clearTimeout(echo1); clearTimeout(echo2);
+    echo1 = setTimeout(() => pump(true), 10);
+    echo2 = setTimeout(() => pump(true), 30);
+  }
 }
+let echo1 = 0;
+let echo2 = 0;
 
 function frame() {
   if (link && link.accepted) pump();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-setInterval(() => pump(), 50);
+setInterval(() => pump(), 25);
 
 // ---------- UI ----------
 let padHidden = false;
