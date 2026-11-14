@@ -72,21 +72,31 @@ jobs:
           gh release create ipad-latest out/GhostPad.ipa --target "$GITHUB_SHA" --latest \
             --title "GhostPad for iPad (latest)" --notes-file notes.md
 
-  web:
-    name: Web app on GitHub Pages
-    # Turn on once: repo Settings -> Pages -> Source: "GitHub Actions".
+  # Web app on GitHub Pages (Settings -> Pages -> Source: "GitHub Actions"), in GitHub's
+  # recommended two steps: package the site, then deploy it.
+  web-package:
+    name: Web app - package
     runs-on: ubuntu-latest
-    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ipad/www
+
+  web:
+    name: Web app - publish on GitHub Pages
+    needs: web-package
+    runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: ipad/www
       - id: deploy
         uses: actions/deploy-pages@v4
