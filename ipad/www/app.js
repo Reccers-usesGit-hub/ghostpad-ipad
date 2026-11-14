@@ -162,7 +162,13 @@ function onCtrl(L, m) {
       break;
     }
     case 'stream':
-      videoMsg(m.on ? 'starting video…' : (m.error ? `no video: ${m.error}` : 'controls-only mode — the PC is not streaming video'));
+      if (m.on) {
+        videoMsg(m.retry ? `video dropped — reconnecting (${m.retry})…` : 'starting video…');
+        watchVideo(L);
+      } else {
+        clearTimeout(L.videoWatch);
+        videoMsg(m.error ? `no video: ${m.error}` : 'controls-only mode — the PC is not streaming video');
+      }
       break;
     case 'bye': onClosed(L); break;
     default: break;
@@ -185,9 +191,25 @@ function onAccepted(L, m) {
   setMsg('');
   showPlay(true);
   videoMsg(m.stream ? 'starting video…' : 'controls-only mode — the PC is not streaming video');
+  if (m.stream) watchVideo(L);
+  diag(L, `${isNativeApp ? 'app' : navigator.standalone ? 'web (home screen)' : 'web (Safari tab)'} · ${navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 160)}`);
   renderHud();
   renderPcs();
   pump(true);
+}
+
+// A line for the PC's connection log (Settings -> OPEN LOG on the PC).
+function diag(L, m) { send(L.ctrl, { t: 'diag', m: String(m).slice(0, 400) }); }
+
+// No picture 12 s after the video should have started: ask the PC to call again.
+function watchVideo(L, tries = 0) {
+  clearTimeout(L.videoWatch);
+  L.videoWatch = setTimeout(() => {
+    if (link !== L || !L.accepted || (L.gotVideo && video.readyState >= 2)) return; // picture is showing
+    diag(L, `still no picture — asking for the video again (${tries + 1})`);
+    send(L.ctrl, { t: 'wantStream', why: L.call ? 'call open but no picture' : 'no call' });
+    if (tries < 5) watchVideo(L, tries + 1);
+  }, 12000);
 }
 
 function tick(L) {
@@ -202,16 +224,62 @@ function onCall(call) {
     try { call.close(); } catch { /* ignore */ }
     return;
   }
-  if (L.call) { try { L.call.close(); } catch { /* ignore */ } }
-  L.call = call;
+  const old = L.call;
+  L.call = call; // set first, so closing the old call below isn't mistaken for a drop
+  L.gotVideo = false;
+  if (old) { try { old.close(); } catch { /* ignore */ } }
   call.answer();
-  call.on('stream', (ms) => { if (link === L && L.call === call) attachStream(call, ms); });
-  call.on('close', () => { if (link === L && L.call === call) { L.call = null; videoMsg('video paused…'); } });
+  let why = 'closed';
+  call.on('stream', (ms) => { if (link === L && L.call === call) attachStream(L, call, ms); });
+  call.on('error', (e) => { why = 'error ' + ((e && (e.type || e.message)) || ''); });
+  call.on('close', () => {
+    if (link !== L || L.call !== call) return;
+    L.call = null;
+    L.gotVideo = false;
+    diag(L, `video dropped (${why})`);
+    videoMsg('video dropped — reconnecting…');
+    watchVideo(L);
+  });
+  watchCall(L, call);
+}
+
+// Report the video's network state and quality to the PC log.
+async function watchCall(L, call) {
+  for (let i = 0; i < 50 && !call.peerConnection; i++) await new Promise((r) => setTimeout(r, 100));
+  const pc = call.peerConnection;
+  if (!pc || L.call !== call) return;
+  const started = now();
+  pc.addEventListener('iceconnectionstatechange', () => { if (L.call === call) diag(L, `video network ${pc.iceConnectionState}`); });
+  let last = null;
+  const t = setInterval(async () => {
+    if (link !== L || L.call !== call) { clearInterval(t); return; }
+    try {
+      const st = await pc.getStats();
+      let inb = null;
+      let pair = null;
+      for (const r of st.values()) {
+        if (r.type === 'inbound-rtp' && r.kind === 'video') inb = r;
+        if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair = r;
+      }
+      if (!inb) { diag(L, `video: no video data yet (network ${pc.iceConnectionState})`); return; }
+      const d = last ? (k) => (inb[k] || 0) - (last[k] || 0) : () => 0;
+      const secs = last ? (inb.timestamp - last.timestamp) / 1000 : 0;
+      const mbps = secs ? (d('bytesReceived') * 8) / secs / 1e6 : ((inb.bytesReceived || 0) * 8) / (now() - started) / 1000;
+      const l = pair && st.get(pair.localCandidateId);
+      const rm = pair && st.get(pair.remoteCandidateId);
+      diag(L, `video in: ${mbps.toFixed(1)} Mbps · ${Math.round(inb.framesPerSecond || 0)} fps · ${inb.frameWidth || '?'}x${inb.frameHeight || '?'}`
+        + ` · lost ${d('packetsLost')} pkts · dropped ${d('framesDropped')} frames · jitter ${Math.round((inb.jitter || 0) * 1000)} ms`
+        + (pair ? ` · via ${l ? l.candidateType : '?'}/${rm ? rm.candidateType : '?'} ${l && l.protocol ? l.protocol : ''}` : ''));
+      last = inb;
+    } catch { /* ignore */ }
+  }, 15000);
+  L.timers.push(t);
 }
 
 const video = $('video');
-function attachStream(call, ms) {
+function attachStream(L, call, ms) {
   video.srcObject = ms;
+  L.gotVideo = true;
   videoMsg('');
   const pc = call.peerConnection;
   if (pc) {
