@@ -57,6 +57,8 @@
         modes: strList(c.modes, 6).filter((m) => modes.includes(m)),
         // only shown while this game value is "1" (e.g. "pbomb": the plane Mini-Bomb is unlocked)
         showWhen: /^[a-z0-9]{1,12}$/i.test(c.showWhen || '') ? c.showWhen : '',
+        // only shown for these characters (e.g. ["Chalice"]); empty = everyone
+        only: variants ? strList(c.only, 6).filter((v) => variants.options.includes(v)) : [],
       };
       if (c.type === 'button') {
         let mask = 0; let trig = 0;
@@ -64,6 +66,9 @@
           const k = String(p).toUpperCase();
           if (k in BTN) mask |= BTN[k]; else if (k in TRIG) trig |= TRIG[k];
         }
+        // a second press that joins shortly after the first, e.g. DOWN, then DASH (Chalice's dodge roll)
+        let thenMask = 0;
+        for (const p of Array.isArray(c.then) ? c.then : []) { const k = String(p).toUpperCase(); if (k in BTN) thenMask |= BTN[k]; }
         const vImages = {};
         if (variants && c.variantImages && typeof c.variantImages === 'object') {
           for (const v of variants.options) { const u = img(c.variantImages[v]); if (u) vImages[v] = u; }
@@ -85,6 +90,7 @@
         }
         controls.push({
           ...base, type: 'button', label: String(c.label ?? '').slice(0, 12), mask, trig,
+          thenMask, thenMs: num(c.thenMs, 20, 500, 70),
           shape: ['circle', 'square', 'pill'].includes(c.shape) ? c.shape : 'circle',
           size: num(c.size, 3, 40, 9.5), w: num(c.w, 3, 60, 13), h: num(c.h, 3, 40, 6.4),
           mode: ['hold', 'toggle', 'turbo'].includes(c.mode) ? c.mode : 'hold',
@@ -149,8 +155,9 @@
     };
   }
 
-  const visibleIn = (c, mode, gs) => (!c.modes.length || !mode || c.modes.includes(mode))
-    && (!c.showWhen || !gs || gs[c.showWhen] === '1');
+  const visibleIn = (c, mode, gs, variant) => (!c.modes.length || !mode || c.modes.includes(mode))
+    && (!c.showWhen || !gs || gs[c.showWhen] === '1')
+    && (!c.only || !c.only.length || !variant || c.only.includes(variant));
   // Signature of every "show only when" value, so a change triggers a redraw.
   const showKey = (l, gs) => (gs ? l.controls.filter((c) => c.showWhen).map((c) => gs[c.showWhen]).join(',') : '');
 
@@ -220,7 +227,7 @@
   function buildHtml(layout, mode, variant, gs) {
     let html = '';
     for (const c of layout.controls) {
-      if (!visibleIn(c, mode, gs)) continue;
+      if (!visibleIn(c, mode, gs, variant)) continue;
       const pos = `left:${c.x}%;top:${c.y}%;${c.color ? `--c:${c.color};` : ''}`;
       if (c.type === 'button') {
         const w = c.shape === 'pill' ? c.w : c.size;
@@ -285,7 +292,7 @@
     lastShow = showKey(layout, gameState);
     items = [];
     for (const c of layout.controls) {
-      if (!visibleIn(c, mode, gameState)) continue;
+      if (!visibleIn(c, mode, gameState, variant)) continue;
       const el = root.querySelector(`[data-i="${c.idx}"]`);
       const it = { c, el, on: false, latched: false, touch: null, vx: 0, vy: 0, dShown: 0, altTimer: 0 };
       if (c.type === 'stick') it.knob = el.firstElementChild;
@@ -411,6 +418,7 @@
     let mask = 0; let trig = 0; let turboHeld = false;
     const phase = Math.floor(performance.now() / 50) % 2 === 0; // turbo: 10 presses/second
     let lx = 0; let ly = 0; let rx = 0; let ry = 0;
+    let forceDown = false; // a two-step press that needs "down": the move stick must not cancel it
 
     for (const it of items) {
       const c = it.c;
@@ -419,6 +427,21 @@
         for (const p of btnTouches.values()) if (hitButton(it, p.x, p.y)) { touched = true; break; }
         let active = c.mode === 'toggle' ? it.latched : touched;
         if (c.mode === 'turbo' && touched) { turboHeld = true; active = phase; }
+        if (c.thenMask) {
+          // Two-step press: the first buttons go down at once, the second joins after thenMs. A quick
+          // tap still plays the whole thing, so the game never sees only half of it.
+          const t = performance.now();
+          if (active && !it.seqOn) {
+            it.seqOn = true; it.seqAt = t; it.seqEnd = t + c.thenMs + 110;
+            setTimeout(recompute, c.thenMs + 2); setTimeout(recompute, c.thenMs + 114);
+          }
+          if (!active) it.seqOn = false;
+          if (!active && t < (it.seqEnd || 0)) active = true;
+          if (active) {
+            if (t - it.seqAt >= c.thenMs) mask |= c.thenMask;
+            if (c.mask & BTN.DOWN) forceDown = true;
+          }
+        }
         if (active) { mask |= c.mask; trig |= c.trig; }
         const lit = c.mode === 'turbo' ? touched : active;
         if (lit !== it.on) { it.on = lit; it.el.classList.toggle('on', lit); }
@@ -443,6 +466,7 @@
     mask |= keyMask & 0xffff;
     trig |= keyMask >>> 16;
     if (!lx && !ly) { lx = keyStick.x; ly = keyStick.y; }
+    if (forceDown) { ly = -1; lx *= 0.3; }
     state.b = mask;
     state.lt = trig & 1 ? 255 : 0;
     state.rt = trig & 2 ? 255 : 0;
