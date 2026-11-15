@@ -251,7 +251,8 @@
           inner += `<span class="txt" style="font-size:${u(Math.min(h * 0.3, (w * 0.7) / Math.max(2, label.length)))}">${esc(label)}</span>`;
         }
         else if (label) inner += `<span class="caption" style="font-size:${u(Math.max(1.4, Math.min(2.2, h * 0.16)))}">${esc(label)}</span>`;
-        html += `<div class="b ${c.shape}${hasArt ? ' art' : ''}${c.mode !== 'hold' ? ' ' + c.mode : ''}" data-i="${c.idx}"
+        const notMine = everyCharacter && c.only && c.only.length && variant && !c.only.includes(variant); // creator: another character's button
+        html += `<div class="b ${c.shape}${hasArt ? ' art' : ''}${c.mode !== 'hold' ? ' ' + c.mode : ''}${notMine ? ' other-char' : ''}" data-i="${c.idx}"
           style="${pos}width:${u(w)};height:${u(h)};font-size:${u(font)}">${inner}</div>`;
       } else if (c.type === 'stick') {
         html += `<div class="stick-base" data-i="${c.idx}" style="${pos}width:${u(c.size)};height:${u(c.size)}">

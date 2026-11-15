@@ -79,3 +79,6 @@
 .pad .dpad .dn { left: 33%; bottom: 0; }
 .pad .dpad .l { left: 0; top: 33%; }
 .pad .dpad .r { right: 0; top: 33%; }
+
+/* Control Creator: a button that belongs to another character than the one being previewed */
+.b.other-char { opacity: 0.3; filter: grayscale(0.6); }
