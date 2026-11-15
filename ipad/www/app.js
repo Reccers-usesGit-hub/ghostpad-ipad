@@ -203,7 +203,7 @@ function onAccepted(L, m) {
   showPlay(true);
   videoMsg(m.stream ? 'starting video…' : 'controls-only mode — the PC is not streaming video');
   if (m.stream) watchVideo(L);
-  diag(L, `${isNativeApp ? 'app' : navigator.standalone ? 'web (home screen)' : 'web (Safari tab)'} · ${navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 160)}`);
+  diag(L, `build 1115b · ${isNativeApp ? 'app' : navigator.standalone ? 'web (home screen)' : 'web (Safari tab)'} · ${navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 160)}`);
   renderHud();
   renderPcs();
   pump(true);
