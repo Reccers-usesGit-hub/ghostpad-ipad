@@ -224,10 +224,10 @@
   const u = (v) => `calc(${v} * var(--u, 1vh) * var(--pad-scale, 1))`;
 
   // HTML for every control visible in `mode` (shared by the iPad and the PC preview).
-  function buildHtml(layout, mode, variant, gs) {
+  function buildHtml(layout, mode, variant, gs, everyCharacter) {
     let html = '';
     for (const c of layout.controls) {
-      if (!visibleIn(c, mode, gs, variant)) continue;
+      if (!visibleIn(c, mode, gs, everyCharacter ? '' : variant)) continue;
       const pos = `left:${c.x}%;top:${c.y}%;${c.color ? `--c:${c.color};` : ''}`;
       if (c.type === 'button') {
         const w = c.shape === 'pill' ? c.w : c.size;
@@ -564,7 +564,7 @@
       let m = opts.mode || '';
       if (m && !l.modes.includes(m)) m = '';
       const v = opts.variant || (l.variants ? l.variants.options[0] : '');
-      el.innerHTML = buildHtml(l, m, v, opts.state || null);
+      el.innerHTML = buildHtml(l, m, v, opts.state || null, !!opts.everyCharacter); // the creator shows one-character buttons too
       if (opts.state) applyState(el, l, v, opts.state);
       return l;
     },
