@@ -347,6 +347,65 @@ function attachStream(L, pc, ms) {
     }
   }
   tryUnmute();
+  watchFrames(L, pc);
+}
+
+// A stuck picture: the video is connected but no new frame has been drawn. Safari's decoder sometimes
+// stops after lost packets and waits; ask the PC for a fresh full picture right away, and for a whole
+// new video if that does not help. (Before: the friend had to leave and reconnect.)
+let frameAt = 0;
+let frameHook = false;
+function noteFrame() { frameAt = now(); video.requestVideoFrameCallback(noteFrame); }
+function watchFrames(L, pc) {
+  if (pc) L.vpc = pc;
+  frameAt = now();
+  if (video.requestVideoFrameCallback && !frameHook) { frameHook = true; video.requestVideoFrameCallback(noteFrame); }
+  clearInterval(L.frameWatch);
+  let dec = -1;        // frames decoded so far
+  let pkts = -1;       // video packets received so far
+  let decAt = now();   // when the decoder last produced a frame
+  let pktAt = now();   // when video data last arrived
+  let asked = 0;       // key-frame requests in this stall
+  let lastKf = 0;
+  let reAsked = 0;     // whole-video restarts in this stall
+  let lastRe = 0;
+  let nudged = 0;
+  let busy = false;
+  L.frameWatch = setInterval(async () => {
+    if (link !== L || !L.accepted) { clearInterval(L.frameWatch); return; }
+    if (busy || !L.gotVideo || !video.srcObject || !L.vpc) return;
+    busy = true;
+    try {
+      let r = null;
+      for (const x of (await L.vpc.getStats()).values()) if (x.type === 'inbound-rtp' && x.kind === 'video') r = x;
+      if (!r) return;
+      const t = now();
+      if (r.packetsReceived !== pkts) { pkts = r.packetsReceived; pktAt = t; }
+      if (r.framesDecoded !== dec) {
+        dec = r.framesDecoded; decAt = t;
+        if (asked) { diag(L, `picture moving again after ${asked} request(s)`); asked = 0; reAsked = 0; }
+      }
+      const stuck = t - decAt;
+      const dataFlowing = t - pktAt < 700;
+      if (stuck > 1200 && dataFlowing) {
+        // Data arrives but the decoder shows nothing new: it needs a fresh full picture.
+        const gap = asked < 2 ? 1500 : asked < 4 ? 3000 : 5000;
+        if (stuck > 7000 && reAsked < 3 && t - lastRe > 15000) {
+          lastRe = t; reAsked++;
+          diag(L, `picture stuck for ${Math.round(stuck / 1000)} s - asking for the video again`);
+          send(L.ctrl, { t: 'wantStream', why: 'picture stuck' });
+        } else if (t - lastKf > gap) {
+          lastKf = t; asked++;
+          send(L.ctrl, { t: 'kf', why: `no new frame for ${Math.round(stuck)} ms` });
+        }
+      } else if (stuck < 500 && frameHook && !document.hidden && t - frameAt > 2500 && t - nudged > 5000) {
+        // Frames are decoded but not drawn: the video element stopped playing.
+        nudged = t;
+        diag(L, 'picture decoded but not shown - restarting playback');
+        video.play().catch(() => {});
+      }
+    } catch { /* stats not available right now */ } finally { busy = false; }
+  }, 400);
 }
 
 // Sound is on by default. Safari only allows sound after a tap on this element, so the CONNECT /
