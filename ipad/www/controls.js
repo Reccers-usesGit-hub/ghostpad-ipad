@@ -91,6 +91,7 @@
         controls.push({
           ...base, type: 'button', label: String(c.label ?? '').slice(0, 12), mask, trig,
           thenMask, thenMs: num(c.thenMs, 20, 500, 70),
+          textColor: safeColor(c.textColor), // colour of the text on a picture badge (for dark badges)
           shape: ['circle', 'square', 'pill'].includes(c.shape) ? c.shape : 'circle',
           size: num(c.size, 3, 40, 9.5), w: num(c.w, 3, 60, 13), h: num(c.h, 3, 40, 6.4),
           mode: ['hold', 'toggle', 'turbo'].includes(c.mode) ? c.mode : 'hold',
@@ -228,7 +229,7 @@
     let html = '';
     for (const c of layout.controls) {
       if (!visibleIn(c, mode, gs, everyCharacter ? '' : variant)) continue;
-      const pos = `left:${c.x}%;top:${c.y}%;${c.color ? `--c:${c.color};` : ''}`;
+      const pos = `left:${c.x}%;top:${c.y}%;${c.color ? `--c:${c.color};` : ''}${c.textColor ? `--txt:${c.textColor};--txt-on:${c.textColor};` : ''}`;
       if (c.type === 'button') {
         const w = c.shape === 'pill' ? c.w : c.size;
         const h = c.shape === 'pill' ? c.h : c.size;

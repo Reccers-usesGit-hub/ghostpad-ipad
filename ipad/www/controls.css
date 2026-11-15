@@ -48,7 +48,7 @@
 .pad .b .count[hidden] { display: none; }
 .pad .b.count-zero .count { background: #bdb3a0; color: #5b4a3a; border-color: #6b5a48; }
 .pad .b .txt { position: relative; color: var(--txt, #5b1b10); text-shadow: none; letter-spacing: .02em; }
-.pad .b.art.on .txt { color: #000; }
+.pad .b.art.on .txt { color: var(--txt-on, #000); }
 .pad .b .caption {
   position: absolute; left: 50%; top: 100%; transform: translate(-50%, 2px); color: #fff; font-family: 'Orbitron', sans-serif;
   font-weight: 800; letter-spacing: .08em; text-shadow: 0 0 4px #000, 0 0 8px #000; white-space: nowrap;
