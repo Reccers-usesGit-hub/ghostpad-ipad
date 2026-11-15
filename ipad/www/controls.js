@@ -421,6 +421,7 @@
     const phase = Math.floor(performance.now() / 50) % 2 === 0; // turbo: 10 presses/second
     let lx = 0; let ly = 0; let rx = 0; let ry = 0;
     let forceDown = false; // a two-step press that needs "down": the move stick must not cancel it
+    let forceUp = false;   // same for "up" (the Noise's super jump)
 
     for (const it of items) {
       const c = it.c;
@@ -442,6 +443,7 @@
           if (active) {
             if (t - it.seqAt >= c.thenMs) mask |= c.thenMask;
             if (c.mask & BTN.DOWN) forceDown = true;
+            if (c.mask & BTN.UP) forceUp = true;
           }
         }
         if (active) { mask |= c.mask; trig |= c.trig; }
@@ -469,6 +471,7 @@
     trig |= keyMask >>> 16;
     if (!lx && !ly) { lx = keyStick.x; ly = keyStick.y; }
     if (forceDown) { ly = -1; lx *= 0.3; }
+    else if (forceUp) { ly = 1; lx *= 0.3; }
     state.b = mask;
     state.lt = trig & 1 ? 255 : 0;
     state.rt = trig & 2 ? 255 : 0;
