@@ -82,3 +82,11 @@
 
 /* Control Creator: a button that belongs to another character than the one being previewed */
 .b.other-char { opacity: 0.3; filter: grayscale(0.6); }
+
+/* A button that follows the game: faded while it cannot be used, glowing while it can */
+.pad .b.st-wait { opacity: 0.32; filter: grayscale(0.55); }
+.pad .b.st-ready { animation: st-ready 0.7s ease-in-out infinite alternate; }
+@keyframes st-ready {
+  from { filter: brightness(1.15) drop-shadow(0 0 4px var(--c, #fff)); }
+  to { filter: brightness(1.45) drop-shadow(0 0 16px var(--c, #fff)) drop-shadow(0 0 28px var(--c, #fff)); }
+}

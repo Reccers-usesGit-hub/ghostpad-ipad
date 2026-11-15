@@ -91,6 +91,8 @@
         controls.push({
           ...base, type: 'button', label: String(c.label ?? '').slice(0, 12), mask, trig,
           thenMask, thenMs: num(c.thenMs, 20, 500, 70),
+          // faded until this game value is "1", glowing while it is (e.g. "sj": super jump is possible now)
+          readyWhen: /^[a-z0-9]{1,12}$/i.test(c.readyWhen || '') ? c.readyWhen : '',
           textColor: safeColor(c.textColor), // colour of the text on a picture badge (for dark badges)
           shape: ['circle', 'square', 'pill'].includes(c.shape) ? c.shape : 'circle',
           size: num(c.size, 3, 40, 9.5), w: num(c.w, 3, 60, 13), h: num(c.h, 3, 40, 6.4),
@@ -175,9 +177,14 @@
   // Apply live game values (super meter, weapon in use...) to drawn buttons without redrawing.
   function applyState(rootEl, l, variant, gs) {
     for (const c of l.controls) {
-      if (c.type !== 'button' || !(c.meter || c.stateImage || c.countKey)) continue;
+      if (c.type !== 'button' || !(c.meter || c.stateImage || c.countKey || c.readyWhen)) continue;
       const el = rootEl.querySelector('[data-i="' + c.idx + '"]');
       if (!el) continue;
+      if (c.readyWhen) { // without the game link (no value) the button just looks normal
+        const rv = gs ? gs[c.readyWhen] : undefined;
+        el.classList.toggle('st-ready', rv === '1');
+        el.classList.toggle('st-wait', rv !== undefined && rv !== '1');
+      }
       const main = el.querySelector('img.main');
       if (main && !main.dataset.alt) {
         const want = iconFor(c, variant, gs);
