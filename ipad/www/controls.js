@@ -59,6 +59,9 @@
         showWhen: /^[a-z0-9]{1,12}$/i.test(c.showWhen || '') ? c.showWhen : '',
         // only shown for these characters (e.g. ["Chalice"]); empty = everyone
         only: variants ? strList(c.only, 6).filter((v) => variants.options.includes(v)) : [],
+        // while the game value forms.key is set (a transformation), the control shows only if it is listed:
+        // {"key": "tf", "show": ["knight", "mort"]}. An empty list hides it in every transformation.
+        forms: (c.forms && typeof c.forms === 'object' && /^[a-z0-9]{1,12}$/i.test(c.forms.key || '')) ? { key: c.forms.key, show: strList(c.forms.show, 48) } : null,
       };
       if (c.type === 'button') {
         let mask = 0; let trig = 0;
@@ -77,7 +80,7 @@
         let stateImage = null; // icon that follows a live game value, e.g. the weapon in use
         if (c.stateImage && typeof c.stateImage === 'object' && /^[a-z0-9]{1,12}$/i.test(c.stateImage.key || '') && c.stateImage.map) {
           const map = {};
-          for (const [k, v] of Object.entries(c.stateImage.map).slice(0, 40)) { const url = img(v); if (url) map[String(k).slice(0, 64)] = url; }
+          for (const [k, v] of Object.entries(c.stateImage.map).slice(0, 96)) { const url = img(v); if (url) map[String(k).slice(0, 64)] = url; }
           stateImage = { key: c.stateImage.key, map };
         }
         const meter = /^[a-z0-9]{1,12}$/i.test(c.meter || '') ? c.meter : '';
@@ -93,6 +96,14 @@
           thenMask, thenMs: num(c.thenMs, 20, 500, 70),
           // faded until this game value is "1", glowing while it is (e.g. "sj": super jump is possible now)
           readyWhen: /^[a-z0-9]{1,12}$/i.test(c.readyWhen || '') ? c.readyWhen : '',
+          // caption that follows a game value, e.g. {"key": "tf", "map": {"ghost": "DASH"}}
+          stateLabel: (() => {
+            const sl = c.stateLabel;
+            if (!sl || typeof sl !== 'object' || !/^[a-z0-9]{1,12}$/i.test(sl.key || '') || !sl.map || typeof sl.map !== 'object') return null;
+            const map = {};
+            for (const [k, v] of Object.entries(sl.map).slice(0, 48)) if (typeof v === 'string') map[String(k).slice(0, 24)] = v.slice(0, 12);
+            return { key: sl.key, map };
+          })(),
           textColor: safeColor(c.textColor), // colour of the text on a picture badge (for dark badges)
           shape: ['circle', 'square', 'pill'].includes(c.shape) ? c.shape : 'circle',
           size: num(c.size, 3, 40, 9.5), w: num(c.w, 3, 60, 13), h: num(c.h, 3, 40, 6.4),
@@ -160,9 +171,10 @@
 
   const visibleIn = (c, mode, gs, variant) => (!c.modes.length || !mode || c.modes.includes(mode))
     && (!c.showWhen || !gs || gs[c.showWhen] === '1')
-    && (!c.only || !c.only.length || !variant || c.only.includes(variant));
+    && (!c.only || !c.only.length || !variant || c.only.includes(variant))
+    && (!c.forms || !gs || !gs[c.forms.key] || c.forms.show.includes(gs[c.forms.key]));
   // Signature of every "show only when" value, so a change triggers a redraw.
-  const showKey = (l, gs) => (gs ? l.controls.filter((c) => c.showWhen).map((c) => gs[c.showWhen]).join(',') : '');
+  const showKey = (l, gs) => (gs ? l.controls.filter((c) => c.showWhen).map((c) => gs[c.showWhen]).join(',') + '|' + [...new Set(l.controls.filter((c) => c.forms).map((c) => c.forms.key))].map((k) => gs[k] || '').join(',') : '');
 
   // Picture a button shows right now: game value > character > plain icon.
   function iconFor(c, variant, gs) {
@@ -215,7 +227,7 @@
         fill.style.setProperty('--fill-top', ((1 - part) * 100).toFixed(1) + '%');
       }
       const cap = el.querySelector('.caption');
-      if (cap) cap.textContent = ready && c.meterLabel ? c.meterLabel : labelFor(c, variant);
+      if (cap) cap.textContent = ready && c.meterLabel ? c.meterLabel : labelFor(c, variant, gs);
       if (count && ready) count.hidden = true; // a full meter fires the super, not an EX
     }
   }
@@ -228,7 +240,10 @@
     const v = c.meterVariants[variant] || {};
     return { base: v.base || c.meterBase, image: v.image || c.meterImage };
   };
-  const labelFor = (c, variant) => (variant && c.vLabels[variant] !== undefined ? c.vLabels[variant] : c.label);
+  const labelFor = (c, variant, gs) => {
+    if (c.stateLabel && gs && c.stateLabel.map[gs[c.stateLabel.key]] !== undefined) return c.stateLabel.map[gs[c.stateLabel.key]];
+    return variant && c.vLabels[variant] !== undefined ? c.vLabels[variant] : c.label;
+  };
   const u = (v) => `calc(${v} * var(--u, 1vh) * var(--pad-scale, 1))`;
 
   // HTML for every control visible in `mode` (shared by the iPad and the PC preview).
@@ -242,7 +257,7 @@
         const h = c.shape === 'pill' ? c.h : c.size;
         const pic = iconFor(c, variant, gs);
         const hasArt = !!(pic || c.bg);
-        const label = labelFor(c, variant);
+        const label = labelFor(c, variant, gs);
         const font = Math.min(h * 0.42, (w * 1.05) / Math.max(1, label.length));
         let inner = '';
         if (c.bg) inner += `<img class="bg" src="${c.bg}" alt="" draggable="false">`;
